@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ program_name }} v{{ version }} - Status</title>
+  <link rel="icon" href="{{ url_for('asset_file', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='iporter.css') }}">
+</head>
+<body>
+  {% include '_header.html' %}
+  <div class="wrap">
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1>IPorter Status</h1>
+          <div class="meta">Runtime summary for this server.</div>
+          <div class="tabs">
+            <a class="tab active" href="{{ url_for('status_page') }}">Status</a>
+            <a class="tab" href="{{ url_for('index') }}">Config</a>
+            <a class="tab" href="{{ url_for('policy_page') }}">Policy DB</a>
+            {% if logs_available %}
+              <a class="tab" href="{{ url_for('logs_page') }}">Logs</a>
+            {% endif %}
+            <a class="tab" href="{{ url_for('download_page') }}">Download</a>
+          </div>
+        </div>
+        <div class="inline">
+          <a class="ghost" href="{{ url_for('change_password_page') }}">Change Password</a>
+          <a class="ghost danger" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+      </div>
+      <div class="content">
+        <div class="status-grid">
+          <div class="panel status-item">
+            <h3>Daemon Status</h3>
+            <div class="status-value">{{ daemon_status }}</div>
+            <div class="meta">Started: {{ daemon_started_at }}</div>
+          </div>
+          <div class="panel status-item">
+            <h3>Last Modified</h3>
+            <div class="meta">Policy: <span id="policy-last-modified">{{ policy_last_modified }}</span></div>
+            <div class="meta">Config: {{ config_last_modified }}</div>
+          </div>
+          <div class="panel status-item">
+            <h3>Group Count</h3>
+            <div class="status-value" id="group-count">{{ group_count }}</div>
+          </div>
+          <div class="panel status-item">
+            <h3>Rule Count</h3>
+            <div class="status-value" id="rule-count">{{ rule_count }}</div>
+          </div>
+          <div class="panel status-item">
+            <h3>Daemon Run Time</h3>
+            <div class="status-value">{{ daemon_run_time }}</div>
+          </div>          
+          <div class="panel status-item">
+            <h3>Current Log File Size</h3>
+            <div class="meta status-path">{{ log_path }}</div>
+            <div class="status-value" id="log-size">{{ log_size }}</div>
+          </div>
+          <div class="panel status-item">
+            <h3>Server IP</h3>
+            <div class="status-value">{{ server_ip }}</div>
+          </div>
+          <div class="panel status-item">
+            <h3>Server OS</h3>
+            <div class="status-value">{{ os_name }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% include '_footer.html' %}
+  </div>
+  <script>
+    (function () {
+      const intervalMs = 15000;
+      let timerId = null;
+      const policyEl = document.getElementById("policy-last-modified");
+      const groupEl = document.getElementById("group-count");
+      const ruleEl = document.getElementById("rule-count");
+      const logSizeEl = document.getElementById("log-size");
+
+      async function refreshLiveStatus() {
+        try {
+          const response = await fetch("{{ url_for('status_data') }}", {
+            headers: { "Accept": "application/json" },
+            cache: "no-store"
+          });
+          if (!response.ok) {
+            return;
+          }
+          const data = await response.json();
+          if (policyEl && typeof data.policy_last_modified === "string") {
+            policyEl.textContent = data.policy_last_modified;
+          }
+          if (groupEl && typeof data.group_count !== "undefined") {
+            groupEl.textContent = String(data.group_count);
+          }
+          if (ruleEl && typeof data.rule_count !== "undefined") {
+            ruleEl.textContent = String(data.rule_count);
+          }
+          if (logSizeEl && typeof data.log_size === "string") {
+            logSizeEl.textContent = data.log_size;
+          }
+        } catch (err) {
+          // Ignore transient refresh errors and keep existing values.
+        }
+      }
+
+      function startRefresh() {
+        if (timerId !== null) {
+          return;
+        }
+        refreshLiveStatus();
+        timerId = window.setInterval(function () {
+          if (document.visibilityState === "visible") {
+            refreshLiveStatus();
+          }
+        }, intervalMs);
+      }
+
+      function stopRefresh() {
+        if (timerId === null) {
+          return;
+        }
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") {
+          startRefresh();
+          return;
+        }
+        stopRefresh();
+      });
+
+      if (document.visibilityState === "visible") {
+        startRefresh();
+      }
+    })();
+  </script>
+</body>
+</html>

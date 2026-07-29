@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime, timezone
+import json
 import logging
 import sqlite3
+import os
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
@@ -15,6 +18,8 @@ from . import VERSION
 from .config import load_config
 from .policy_db import apply_db_policy, resolve_policy_db_path
 from .server import run_server
+
+RUNTIME_STATUS_FILENAME = "iporter-daemon-status.json"
 
 
 def _setup_verbose_action_logging(
@@ -88,6 +93,31 @@ def _validate_startup_paths(config_path: str, *, log_file_path: str) -> None:
     _assert_log_path_writable(config_path, log_file_path)
 
 
+def _runtime_status_path(config_path: str) -> Path:
+    cfg_path = Path(config_path).resolve()
+    return cfg_path.parent / RUNTIME_STATUS_FILENAME
+
+
+def _write_runtime_status(config_path: str, *, listen_host: str, listen_port: int) -> None:
+    status_path = _runtime_status_path(config_path)
+    payload = {
+        "pid": os.getpid(),
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "listen_host": listen_host,
+        "listen_port": listen_port,
+    }
+    status_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _clear_runtime_status(config_path: str) -> None:
+    status_path = _runtime_status_path(config_path)
+    try:
+        if status_path.exists():
+            status_path.unlink()
+    except OSError:
+        logging.warning("Failed to remove runtime status file: %s", status_path)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="iporter",
@@ -137,7 +167,15 @@ def main() -> None:
         max_bytes=config.logrotate.max_bytes,
         backup_count=config.logrotate.backup_count,
     )
-    asyncio.run(run_server(config))
+    _write_runtime_status(
+        args.config,
+        listen_host=config.listen_host,
+        listen_port=config.listen_port,
+    )
+    try:
+        asyncio.run(run_server(config, args.config))
+    finally:
+        _clear_runtime_status(args.config)
 
 
 if __name__ == "__main__":

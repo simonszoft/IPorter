@@ -13,14 +13,19 @@ IPorter is a local DNS server with source-IP based policy control, SQLite-backed
 - One-time policy migration from YAML to SQLite
 - Web UI with authentication
 - Web UI pages:
+  - Status
   - Config
   - Policy DB
   - Logs (with search)
   - Download
   - Change Password
+- Status page live updates every 15s when page tab is active
+- Live status API endpoint for UI (`/status/data`)
 - Verbose action logging for `block` and `rewrite`
 - Rotating log files (`max_bytes`, `backup_count`)
 - Startup checks for DB and log writability
+- Daemon runtime status tracking (PID/start time file)
+- Runtime policy auto-reload when policy DB changes
 - systemd service management scripts
 - Full installer script
 
@@ -115,6 +120,25 @@ Default URL:
 - edit and save `config.yaml`
 - validation before write
 
+### Status page
+- daemon status (`Running|Stopped|Unknown`)
+- daemon start time (UTC)
+- daemon run time
+- last modified timestamps:
+  - policy DB
+  - config file
+- group count
+- rule count
+- server IP
+- server OS
+- current log file path and size
+- live refresh every 15 seconds while tab is active/visible
+- targeted live field refresh from `/status/data` for:
+  - `policy_last_modified`
+  - `group_count`
+  - `rule_count`
+  - `log_size`
+
 ### Policy DB page
 - add/edit/delete group networks
 - add/edit/delete rules
@@ -134,6 +158,11 @@ Default URL:
 - change Web UI password (stored in `secure.json`)
 - checks current password
 - confirms new password
+
+### Status data endpoint
+- `GET /status/data`
+- requires authentication
+- returns JSON snapshot used by Status page live refresh
 
 ## systemd Service Script
 
@@ -231,6 +260,14 @@ Default format:
 }
 ```
 
+## Runtime Status File
+
+The DNS daemon writes runtime state to:
+
+- `iporter-daemon-status.json` (in the same directory as `config.yaml`)
+
+Used by the Status page to show daemon process state and run time. The file is removed when daemon exits normally.
+
 ## Policy Migration Behavior
 
 - On first startup with empty/missing DB:
@@ -248,3 +285,4 @@ Default format:
 
 - DNS transport is UDP.
 - Rules are evaluated in order (first match wins).
+- Policy updates from Web UI are auto-applied by running daemon (policy DB change detection and in-memory reload).

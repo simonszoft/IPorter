@@ -56,7 +56,7 @@ def test_login_and_save_flow(tmp_path: Path) -> None:
 
     ok = client.post("/login", data={"password": "P4ssw0rd!"}, follow_redirects=False)
     assert ok.status_code == 302
-    assert ok.headers.get("Location", "").endswith("/")
+    assert ok.headers.get("Location", "").endswith("/status")
 
     edited = VALID_CONFIG.replace("listen_port: 5353", "listen_port: 5354")
     saved = client.post("/save", data={"config_text": edited}, follow_redirects=False)
@@ -298,3 +298,68 @@ def test_download_log_redirects_when_missing(tmp_path: Path) -> None:
     response = client.get("/download/log", follow_redirects=False)
     assert response.status_code == 302
     assert "/download" in response.headers.get("Location", "")
+
+
+def test_status_page_shows_runtime_summary(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        VALID_CONFIG + "\nverbose_logging: true\nlog_file_path: iporter.log\n",
+        encoding="utf-8",
+    )
+
+    secure_path = tmp_path / "secure.json"
+    secure_path.write_text('{"password":"P4ssw0rd!"}', encoding="utf-8")
+
+    log_path = tmp_path / "iporter.log"
+    log_path.write_text("abc", encoding="utf-8")
+
+    app = create_app(str(config_path))
+    app.testing = True
+    client = app.test_client()
+
+    login = client.post("/login", data={"password": "P4ssw0rd!"}, follow_redirects=False)
+    assert login.status_code == 302
+
+    response = client.get("/status")
+    assert response.status_code == 200
+    assert b"IPorter Status" in response.data
+    assert b"Daemon Status" in response.data
+    assert b"Daemon Run Time" in response.data
+    assert b"Last Modified" in response.data
+    assert b"Policy:" in response.data
+    assert b"Config:" in response.data
+    assert b"Group Count" in response.data
+    assert b"Rule Count" in response.data
+    assert b"Current Log File Size" in response.data
+
+
+def test_status_data_endpoint_returns_live_fields(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        VALID_CONFIG + "\nverbose_logging: true\nlog_file_path: iporter.log\n",
+        encoding="utf-8",
+    )
+
+    secure_path = tmp_path / "secure.json"
+    secure_path.write_text('{"password":"P4ssw0rd!"}', encoding="utf-8")
+
+    app = create_app(str(config_path))
+    app.testing = True
+    client = app.test_client()
+
+    # Requires auth.
+    unauthorized = client.get("/status/data", follow_redirects=False)
+    assert unauthorized.status_code == 302
+    assert "/login" in unauthorized.headers.get("Location", "")
+
+    login = client.post("/login", data={"password": "P4ssw0rd!"}, follow_redirects=False)
+    assert login.status_code == 302
+
+    response = client.get("/status/data")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert isinstance(payload, dict)
+    assert "policy_last_modified" in payload
+    assert "group_count" in payload
+    assert "rule_count" in payload
+    assert "log_size" in payload

@@ -5,12 +5,15 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import logging
 import socket
+from pathlib import Path
 
 from dnslib import DNSHeader, DNSLabel, DNSQuestion, DNSRecord, QTYPE, RCODE
 
 from .config import ServerConfig
+from .policy_db import load_policy, resolve_policy_db_path
 from .rules import Decision, decide
 
 LOG = logging.getLogger(__name__)
@@ -18,10 +21,39 @@ ACTION_LOG = logging.getLogger("iporter.action")
 
 
 class DnsUdpProtocol(asyncio.DatagramProtocol):
-    def __init__(self, config: ServerConfig) -> None:
+    def __init__(self, config: ServerConfig, config_path: str | None = None) -> None:
         self.config = config
+        self._config_path = Path(config_path).resolve() if config_path else None
+        self._policy_db_path = (
+            resolve_policy_db_path(self._config_path) if self._config_path is not None else None
+        )
+        self._policy_db_mtime_ns = self._policy_db_stat_mtime_ns()
         self.transport: asyncio.DatagramTransport | None = None
         self._inflight: set[asyncio.Task[None]] = set()
+
+    def _policy_db_stat_mtime_ns(self) -> int | None:
+        if self._policy_db_path is None or not self._policy_db_path.exists():
+            return None
+        try:
+            return self._policy_db_path.stat().st_mtime_ns
+        except OSError:
+            return None
+
+    def _refresh_policy_if_needed(self) -> None:
+        if self._policy_db_path is None:
+            return
+
+        current_mtime_ns = self._policy_db_stat_mtime_ns()
+        if current_mtime_ns is None or current_mtime_ns == self._policy_db_mtime_ns:
+            return
+
+        try:
+            group_map, rules = load_policy(self._policy_db_path)
+            self.config = replace(self.config, ip_groups=group_map, rules=rules)
+            self._policy_db_mtime_ns = current_mtime_ns
+            LOG.info("Reloaded policy from %s", self._policy_db_path)
+        except Exception as exc:
+            LOG.warning("Failed to reload policy from %s: %s", self._policy_db_path, exc)
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self.transport = transport  # type: ignore[assignment]
@@ -39,6 +71,7 @@ class DnsUdpProtocol(asyncio.DatagramProtocol):
     async def _handle_request(self, data: bytes, addr: tuple[str, int]) -> None:
         client_ip, client_port = addr
         try:
+            self._refresh_policy_if_needed()
             request = DNSRecord.parse(data)
             if not request.questions:
                 return
@@ -163,10 +196,10 @@ class DnsUdpProtocol(asyncio.DatagramProtocol):
             )
 
 
-async def run_server(config: ServerConfig) -> None:
+async def run_server(config: ServerConfig, config_path: str | None = None) -> None:
     loop = asyncio.get_running_loop()
     transport, _ = await loop.create_datagram_endpoint(
-        lambda: DnsUdpProtocol(config),
+        lambda: DnsUdpProtocol(config, config_path=config_path),
         local_addr=(config.listen_host, config.listen_port),
     )
     try:

@@ -5,13 +5,27 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hmac
 import json
+import os
+import platform
+import socket
 from pathlib import Path
 from typing import Any
 
 import yaml
-from flask import Flask, redirect, render_template, request, send_file, send_from_directory, session, url_for
+from flask import (
+    Flask,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    send_from_directory,
+    session,
+    url_for,
+)
 
 from . import PROGRAM_NAME, VERSION
 from .config import load_config, parse_config_data
@@ -37,6 +51,7 @@ DEFAULT_LOCAL_LAN_NAME = "LOCAL"
 DEFAULT_SUPPORT_USER_NAME = "Support"
 DEFAULT_SUPPORT_USER_EMAIL = "support@localhost"
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+RUNTIME_STATUS_FILENAME = "iporter-daemon-status.json"
 
 
 def _validate_config_text(config_text: str) -> None:
@@ -211,6 +226,138 @@ def _latest_existing_log_file(config_path: str) -> Path | None:
     return max(existing, key=lambda p: p.stat().st_mtime)
 
 
+def _detect_server_ip() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+            return str(ip)
+    except Exception:
+        return "127.0.0.1"
+
+
+def _format_size(size_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(max(size_bytes, 0))
+    idx = 0
+    while value >= 1024 and idx < len(units) - 1:
+        value /= 1024
+        idx += 1
+    if idx == 0:
+        return f"{int(value)} {units[idx]}"
+    return f"{value:.2f} {units[idx]}"
+
+
+def _format_duration(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, sec = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {sec}s"
+    hours, minute = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minute}m"
+    days, hour = divmod(hours, 24)
+    return f"{days}d {hour}h"
+
+
+def _daemon_runtime_status(config_path: str) -> dict[str, str]:
+    status_path = Path(config_path).resolve().parent / RUNTIME_STATUS_FILENAME
+    if not status_path.exists():
+        return {
+            "daemon_status": "Stopped",
+            "daemon_started_at": "N/A",
+            "daemon_run_time": "N/A",
+        }
+
+    try:
+        raw: Any = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "daemon_status": "Unknown",
+            "daemon_started_at": "Invalid status file",
+            "daemon_run_time": "N/A",
+        }
+
+    if not isinstance(raw, dict):
+        return {
+            "daemon_status": "Unknown",
+            "daemon_started_at": "Invalid status file",
+            "daemon_run_time": "N/A",
+        }
+
+    pid_raw = raw.get("pid")
+    started_raw = raw.get("started_at_utc", "")
+
+    try:
+        pid = int(pid_raw)
+        os.kill(pid, 0)
+        is_running = True
+    except Exception:
+        is_running = False
+
+    try:
+        started_dt = datetime.fromisoformat(str(started_raw).strip())
+        if started_dt.tzinfo is None:
+            started_dt = started_dt.replace(tzinfo=timezone.utc)
+        started_at = started_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        elapsed = int((datetime.now(timezone.utc) - started_dt.astimezone(timezone.utc)).total_seconds())
+        run_time = _format_duration(max(elapsed, 0)) if is_running else "N/A"
+    except Exception:
+        started_at = "Unknown"
+        run_time = "N/A"
+
+    return {
+        "daemon_status": "Running" if is_running else "Stopped",
+        "daemon_started_at": started_at,
+        "daemon_run_time": run_time,
+    }
+
+
+def _policy_last_modified(db_path: Path) -> str:
+    if not db_path.exists() or not db_path.is_file():
+        return "N/A"
+    try:
+        ts = db_path.stat().st_mtime
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        return "Unknown"
+
+
+def _file_last_modified(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return "N/A"
+    try:
+        ts = path.stat().st_mtime
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        return "Unknown"
+
+
+def _collect_status_snapshot(config_path: str, db_path: Path) -> dict[str, Any]:
+    groups = list_group_networks(db_path)
+    rules = list_rules(db_path)
+    log_path = _resolve_log_file_path(config_path)
+    log_size = log_path.stat().st_size if log_path.exists() and log_path.is_file() else 0
+    daemon = _daemon_runtime_status(config_path)
+
+    return {
+        "server_ip": _detect_server_ip(),
+        "os_name": platform.platform(),
+        "group_count": len(groups),
+        "rule_count": len(rules),
+        "log_path": str(log_path),
+        "log_size": _format_size(log_size),
+        "daemon_status": daemon["daemon_status"],
+        "daemon_started_at": daemon["daemon_started_at"],
+        "daemon_run_time": daemon["daemon_run_time"],
+        "policy_last_modified": _file_last_modified(db_path),
+        "config_last_modified": _file_last_modified(Path(config_path)),
+    }
+
+
 def create_app(config_path: str) -> Flask:
     app = Flask(__name__)
     cfg_path = Path(config_path).resolve()
@@ -270,7 +417,7 @@ def create_app(config_path: str) -> Flask:
     @app.get("/login")
     def login_page():
         if _is_authenticated():
-            return redirect(url_for("index"))
+            return redirect(url_for("status_page"))
         return render_template("login.html", error="")
 
     @app.post("/login")
@@ -279,7 +426,7 @@ def create_app(config_path: str) -> Flask:
         expected_password = str(app.config["IPORTER_GUI_PASSWORD"])
         if hmac.compare_digest(input_password, expected_password):
             session["authenticated"] = True
-            return redirect(url_for("index"))
+            return redirect(url_for("status_page"))
         return render_template("login.html", error="Invalid password.")
 
     @app.get("/logout")
@@ -443,6 +590,32 @@ def create_app(config_path: str) -> Flask:
             message="Password changed successfully.",
             message_kind="ok",
         )
+
+    @app.get("/status")
+    def status_page():
+        auth_redirect = _require_auth()
+        if auth_redirect is not None:
+            return auth_redirect
+
+        cfg = str(app.config["IPORTER_CONFIG_PATH"])
+        db = _policy_db()
+        snapshot = _collect_status_snapshot(cfg, db)
+
+        return render_template(
+            "status.html",
+            **snapshot,
+        )
+
+    @app.get("/status/data")
+    def status_data():
+        auth_redirect = _require_auth()
+        if auth_redirect is not None:
+            return auth_redirect
+
+        cfg = str(app.config["IPORTER_CONFIG_PATH"])
+        db = _policy_db()
+        snapshot = _collect_status_snapshot(cfg, db)
+        return jsonify(snapshot)
 
     @app.get("/")
     def index():

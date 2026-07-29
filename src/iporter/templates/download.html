@@ -16,6 +16,7 @@
           <h1>Download</h1>
           <div class="meta">Download current policy DB, latest log, and current config file.</div>
           <div class="tabs">
+            <a class="tab" href="{{ url_for('status_page') }}">Status</a>
             <a class="tab" href="{{ url_for('index') }}">Config</a>
             <a class="tab" href="{{ url_for('policy_page') }}">Policy DB</a>
             {% if logs_available %}

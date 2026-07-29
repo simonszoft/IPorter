@@ -232,6 +232,32 @@ button {
   background: #fcfdff;
 }
 
+.status-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.status-item h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #344357;
+}
+
+.status-path {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.status-value {
+  margin-top: 8px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
