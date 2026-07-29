@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ program_name }} v{{ version }} - Logs</title>
+  <link rel="icon" href="{{ url_for('asset_file', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='iporter.css') }}">
+</head>
+<body>
+  {% include '_header.html' %}
+  <div class="wrap">
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1>IPorter Logs</h1>
+          <div class="meta">Latest file: {{ log_path or 'N/A' }}</div>
+          <div class="tabs">
+            <a class="tab" href="{{ url_for('index') }}">Config</a>
+            <a class="tab" href="{{ url_for('policy_page') }}">Policy DB</a>
+            <a class="tab active" href="{{ url_for('logs_page') }}">Logs</a>
+            <a class="tab" href="{{ url_for('download_page') }}">Download</a>
+          </div>
+        </div>
+        <div class="inline">
+          <a class="ghost" href="{{ url_for('change_password_page') }}">Change Password</a>
+          <a class="ghost danger" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+      </div>
+      <div class="content">
+        {% if message %}
+          <div class="banner {{ message_kind }}">{{ message }}</div>
+        {% endif %}
+        <form method="get" action="{{ url_for('logs_page') }}" class="actions">
+          <input
+            type="text"
+            name="q"
+            value="{{ query }}"
+            placeholder="Search in log lines"
+            aria-label="Search logs"
+          >
+          <button type="submit">Search</button>
+          <a class="ghost" href="{{ url_for('logs_page') }}">Clear</a>
+        </form>
+        <div class="meta">Displayed lines: {{ filtered_count }}</div>
+        <textarea spellcheck="false" readonly>{{ log_text }}</textarea>
+      </div>
+    </div>
+    {% include '_footer.html' %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ program_name }} v{{ version }} - Login</title>
+  <link rel="icon" href="{{ url_for('asset_file', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='iporter.css') }}">
+</head>
+<body>
+  {% include '_header.html' %}
+  <div class="wrap" style="max-width: 430px;">
+    <div class="card">
+      <div class="content">
+        <h1>IPorter Config GUI</h1>
+        <p class="meta">Sign in to manage DNS configuration and policy DB.</p>
+        {% if error %}
+          <div class="banner error">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="{{ url_for('login') }}">
+          <input name="password" type="password" required autocomplete="current-password" placeholder="Password">
+          <div class="actions"><button type="submit">Open</button></div>
+        </form>
+      </div>
+    </div>
+    {% include '_footer.html' %}
+  </div>
+</body>
+</html>

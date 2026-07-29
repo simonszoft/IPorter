@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ program_name }} v{{ version }} - Policy DB</title>
+  <link rel="icon" href="{{ url_for('asset_file', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='iporter.css') }}">
+</head>
+<body>
+  {% include '_header.html' %}
+  <div class="wrap">
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1>IPorter Policy DB</h1>
+          <div class="meta">Database: {{ db_path }}</div>
+          <div class="tabs">
+            <a class="tab" href="{{ url_for('index') }}">Config</a>
+            <a class="tab active" href="{{ url_for('policy_page') }}">Policy DB</a>
+            {% if logs_available %}
+              <a class="tab" href="{{ url_for('logs_page') }}">Logs</a>
+            {% endif %}
+            <a class="tab" href="{{ url_for('download_page') }}">Download</a>
+          </div>
+        </div>
+        <div class="inline">
+          <a class="ghost" href="{{ url_for('change_password_page') }}">Change Password</a>
+          <a class="ghost danger" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+      </div>
+      <div class="content">
+        {% if message %}
+          <div class="banner {{ message_kind }}">{{ message }}</div>
+        {% endif %}
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Group Networks</h3>
+            <form method="post" action="{{ url_for('add_group') }}" class="inline">
+              <input name="group_name" placeholder="group name (e.g. students)" required>
+              <input name="cidr" placeholder="CIDR or IP (e.g. 192.168.0.0/24)" required>
+              <button type="submit">Add Group Network</button>
+            </form>
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Group</th><th>CIDR/IP</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {% for row in group_rows %}
+                  <tr>
+                    <td>{{ row.id }}</td>
+                    <td>
+                      <form method="post" action="{{ url_for('update_group', row_id=row.id) }}" class="inline">
+                        <input name="group_name" value="{{ row.group_name }}" required>
+                    </td>
+                    <td>
+                        <input name="cidr" value="{{ row.cidr }}" required>
+                    </td>
+                    <td class="inline">
+                        <button type="submit">Save</button>
+                      </form>
+                      <form method="post" action="{{ url_for('delete_group', row_id=row.id) }}">
+                        <button class="danger" type="submit">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="panel">
+            <h3>Rules</h3>
+            <datalist id="existing-groups">
+              {% for group_name in group_names %}
+                <option value="{{ group_name }}"></option>
+              {% endfor %}
+            </datalist>
+            <form method="post" action="{{ url_for('add_rule_row') }}" class="inline">
+              <input name="group_name" placeholder="group" list="existing-groups" required>
+              <input name="domain" placeholder="domain or wildcard" required>
+              <select name="action" required>
+                <option value="allow">allow</option>
+                <option value="rewrite">rewrite</option>
+                <option value="block">block</option>
+              </select>
+              <input name="target" placeholder="target for rewrite">
+              <button type="submit">Add Rule</button>
+            </form>
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Group</th><th>Domain</th><th>Action</th><th>Target</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {% for row in rule_rows %}
+                  <tr>
+                    <td>{{ row.id }}</td>
+                    <td>
+                      <form method="post" action="{{ url_for('update_rule_row', row_id=row.id) }}" class="inline">
+                        <input name="group_name" value="{{ row.group_name }}" list="existing-groups" required>
+                    </td>
+                    <td>
+                        <input name="domain" value="{{ row.domain }}" required>
+                    </td>
+                    <td>
+                        <select name="action" required>
+                          <option value="allow" {% if row.action == 'allow' %}selected{% endif %}>allow</option>
+                          <option value="rewrite" {% if row.action == 'rewrite' %}selected{% endif %}>rewrite</option>
+                          <option value="block" {% if row.action == 'block' %}selected{% endif %}>block</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input name="target" value="{{ row.target or '' }}" placeholder="target for rewrite">
+                    </td>
+                    <td class="inline">
+                        <button type="submit">Save</button>
+                      </form>
+                      <form method="post" action="{{ url_for('delete_rule_row', row_id=row.id) }}">
+                        <button class="danger" type="submit">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% include '_footer.html' %}
+  </div>
+</body>
+</html>

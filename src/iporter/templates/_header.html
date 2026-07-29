@@ -1,0 +1,16 @@
+<div class="app-header">
+  <div class="app-header-inner">
+    <div class="brand">
+      <img class="brand-logo" src="{{ url_for('asset_file', filename='iporter_logo.png') }}" alt="IPorter logo">
+      <div class="brand-title">
+        <span class="brand-program">{{ program_name }}</span>
+        <span class="brand-sep">|</span>
+        <span>LAN:</span>
+        <span class="prg-data">{{ local_lan_name }}</span>
+        <span class="brand-sep">|</span>
+        <span>SUPPORT:</span>
+        <a href="mailto:{{ support_user_email }}">{{ support_user_name }}</a>
+      </div>
+    </div>
+  </div>
+</div>

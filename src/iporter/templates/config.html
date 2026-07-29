@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ program_name }} v{{ version }} - Config GUI</title>
+  <link rel="icon" href="{{ url_for('asset_file', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='iporter.css') }}">
+</head>
+<body>
+  {% include '_header.html' %}
+  <div class="wrap">
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1>IPorter Config GUI</h1>
+          <div class="meta">Editing: {{ config_path }}</div>
+          <div class="tabs">
+            <a class="tab active" href="{{ url_for('index') }}">Config</a>
+            <a class="tab" href="{{ url_for('policy_page') }}">Policy DB</a>
+            {% if logs_available %}
+              <a class="tab" href="{{ url_for('logs_page') }}">Logs</a>
+            {% endif %}
+            <a class="tab" href="{{ url_for('download_page') }}">Download</a>
+          </div>
+        </div>
+        <div class="inline">
+          <a class="ghost" href="{{ url_for('change_password_page') }}">Change Password</a>
+          <a class="ghost danger" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+      </div>
+      <div class="content">
+        {% if message %}
+          <div class="banner {{ message_kind }}">{{ message }}</div>
+        {% endif %}
+        <form method="post" action="{{ url_for('save') }}">
+          <textarea name="config_text" spellcheck="false">{{ config_text }}</textarea>
+          <div class="actions">
+            <button type="submit">Validate and Save</button>
+            <a class="ghost" href="{{ url_for('index') }}">Reload from Disk</a>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% include '_footer.html' %}
+  </div>
+</body>
+</html>
