@@ -1,47 +1,53 @@
 # IPorter - Local DNS Server
 
-IPorter is a local DNS server with source-IP based policy control.
+IPorter is a local DNS server with source-IP based policy control, SQLite-backed policy storage, and a protected Web UI.
 
-It can:
-- allow domains,
-- rewrite domains (redirect DNS answers),
-- block domains (NXDOMAIN),
-- apply policies by client IP groups,
-- manage policies in SQLite,
-- provide a protected web GUI for config and policy management.
+## Features
 
-## What it does
+- DNS policy actions by client IP group:
+  - `allow`
+  - `rewrite`
+  - `block` (NXDOMAIN)
+- Parallel upstream DNS queries (first successful reply wins)
+- Policy persistence in SQLite
+- One-time policy migration from YAML to SQLite
+- Web UI with authentication
+- Web UI pages:
+  - Config
+  - Policy DB
+  - Logs (with search)
+  - Download
+  - Change Password
+- Verbose action logging for `block` and `rewrite`
+- Rotating log files (`max_bytes`, `backup_count`)
+- Startup checks for DB and log writability
+- systemd service management scripts
+- Full installer script
 
-- Maps source IP addresses to groups using CIDRs or single IPs.
-- Applies ordered DNS rules by group.
-- Supports actions:
-  - `allow`: forward request unchanged.
-  - `rewrite`: query target domain instead.
-  - `block`: return `NXDOMAIN`.
-- Queries multiple upstream DNS servers in parallel and returns the first successful response.
+## Project Structure
 
-Example:
-- If an IP in group `students` requests `facebook.com`, IPorter can rewrite to `wikipedia.org`.
-
-## Project structure
-
-- `src/iporter/config.py`: config loading and validation
-- `src/iporter/rules.py`: group matching and decision logic
+- `src/iporter/cli.py`: DNS server CLI entrypoint and startup checks
 - `src/iporter/server.py`: UDP DNS server and upstream forwarding
-- `src/iporter/cli.py`: DNS server CLI entrypoint
-- `src/iporter/policy_db.py`: SQLite policy storage and migration
-- `src/iporter/web_ui.py`: authenticated Web UI (config + Policy DB tab)
-- `config/config.yaml`: main configuration
-- `config/secure.json`: Web UI password/session secret
-- `scripts/iporter-service.sh`: systemd service manager
-- `scripts/iporter_install.sh`: full installer
+- `src/iporter/config.py`: YAML model and validation
+- `src/iporter/rules.py`: decision engine
+- `src/iporter/policy_db.py`: SQLite schema, CRUD, migration
+- `src/iporter/web_ui.py`: Flask Web UI routes and logic
+- `src/iporter/templates/`: HTML templates
+- `src/iporter/static/iporter.css`: Web UI stylesheet
+- `config/config.yaml`: runtime config
+- `config/secure.json`: Web UI auth secret/password
+- `scripts/iporter-service.sh`: systemd helper script
+- `scripts/iporter_install.sh`: full install script
 
 ## Requirements
 
 - Python 3.10+
-- Linux with systemd (for service installation)
+- Linux
+- systemd (for service installation)
 
-## Quick install (manual)
+## Install
+
+### Manual install
 
 ```bash
 python -m venv .venv
@@ -49,40 +55,45 @@ source .venv/bin/activate
 pip install -e .[dev]
 ```
 
-## Full install (recommended)
+### Full install (recommended)
 
 ```bash
 ./scripts/iporter_install.sh
 ```
 
-What the full installer does:
-- Syncs project files to install directory.
-- Creates or reuses `.venv` in install directory.
-- Installs all Python dependencies automatically.
-- Creates `config/secure.json` if missing.
-- Sets `web_gui.port` in config (default `8080`, configurable).
-- Asks whether to create `/etc/iporter/settings` symlink.
-- Runs `./scripts/iporter-service.sh install` in the installed copy.
+The installer:
+- syncs files to target directory (default `/opt/IPorter`)
+- creates/reuses `.venv`
+- installs dependencies
+- creates `config/secure.json` if missing
+- sets `web_gui.port`
+- optionally creates `/etc/iporter/settings` symlink
+- runs service installation
 
 Installer environment variables:
-- `IPORTER_INSTALL_DIR`: target install directory (default: `/opt/IPorter`)
-- `IPORTER_WEB_UI_PORT`: Web UI port (default: `8080`)
-- `PYTHON_BIN`: Python executable (default: `python3`)
-- `IPORTER_CONFIG`: config path (default: `<install-dir>/config/config.yaml`)
-- `IPORTER_LOG_LEVEL`: service log level (`DEBUG|INFO|WARNING|ERROR`)
-- `IPORTER_USER`: service user override
-- `IPORTER_GROUP`: service group override
+- `PYTHON_BIN` (default `python3`)
+- `IPORTER_INSTALL_DIR` (default `/opt/IPorter`)
+- `IPORTER_CONFIG` (default `<install-dir>/config/config.yaml`)
+- `IPORTER_LOG_LEVEL` (default `INFO`)
+- `IPORTER_WEB_UI_PORT` (default `8080`)
+- `IPORTER_USER`
+- `IPORTER_GROUP`
 
-## Run DNS server
+## Run DNS Server
 
 ```bash
 iporter --config config/config.yaml --log-level INFO
 ```
 
-CLI parameters:
-- `-c, --config`: YAML config path (default: `config/config.yaml`)
-- `--log-level`: `DEBUG|INFO|WARNING|ERROR` (default: `INFO`)
-- `--version`: print app version
+CLI options:
+- `-c, --config`: config path
+- `--log-level`: `DEBUG|INFO|WARNING|ERROR`
+- `--version`
+
+Startup checks:
+- checks policy DB path is writable
+- checks log file path is writable
+- exits with error if either check fails
 
 ## Run Web UI
 
@@ -90,31 +101,41 @@ CLI parameters:
 iporter-config-ui --config config/config.yaml
 ```
 
-Optional parameters:
-- `--config`: YAML config path (default: `config/config.yaml`)
-- `--host`: bind host override (otherwise uses `web_gui.host`)
-- `--port`: bind port override (otherwise uses `web_gui.port`)
+Web UI options:
+- `--config`: config path
+- `--host`: override web bind host
+- `--port`: override web bind port
 
-Open in browser:
-- `http://127.0.0.1:8080` (or your configured `web_gui.port`)
+Default URL:
+- `http://127.0.0.1:8080`
 
-Web UI behavior:
-- Requires login (password from `config/secure.json`).
-- Config tab validates YAML before save.
-- Policy DB tab supports add/edit/delete for groups and rules.
+## Web UI Functions
 
-Default `config/secure.json`:
+### Config page
+- edit and save `config.yaml`
+- validation before write
 
-```json
-{
-  "password": "P4ssw0rd!",
-  "session_secret": "change-this-session-secret"
-}
-```
+### Policy DB page
+- add/edit/delete group networks
+- add/edit/delete rules
+- rule group autocomplete from existing groups
+- warning when adding a rule with non-existing group
 
-## systemd service management
+### Logs page
+- shows full latest log file
+- search box to filter log lines (case-insensitive)
 
-Use:
+### Download page
+- download current policy DB
+- download latest/current log file
+- download current config file
+
+### Change Password page
+- change Web UI password (stored in `secure.json`)
+- checks current password
+- confirms new password
+
+## systemd Service Script
 
 ```bash
 ./scripts/iporter-service.sh install
@@ -126,60 +147,104 @@ Use:
 ```
 
 Managed units:
-- `iporter.service` (DNS)
-- `iporter-webui.service` (Web UI)
+- `iporter.service`
+- `iporter-webui.service`
 
-During `install`, the script asks:
-- `Do you want to use the default DNS port (53)?`
+Install behavior:
+- asks whether to use DNS port `53`
+- if yes, applies `systemd-resolved` stub changes
+- if no, sets DNS port to `5353`
 
-If `yes`:
-- sets `listen_port` to `53`
-- updates `systemd-resolved` stub settings
-
-If `no`:
-- sets `listen_port` to `5353`
-
-Service install environment overrides:
+Service-related environment overrides:
 - `IPORTER_USER`
 - `IPORTER_GROUP`
 - `IPORTER_CONFIG`
 - `IPORTER_LOG_LEVEL`
 
-## DNS client testing
+## Configuration Reference (`config/config.yaml`)
 
-Query with your configured DNS port (`listen_port`):
+Required:
+- `upstream_dns_servers`: list of at least 2 servers
 
-```bash
-dig @127.0.0.1 -p 5353 facebook.com
-dig @127.0.0.1 -p 53 facebook.com
-```
+Core DNS:
+- `listen_host`: bind host (default `0.0.0.0`)
+- `listen_port`: bind port (default `5353`)
+- `response_ttl`: response TTL (default `60`)
 
-## Configuration reference
-
-Main fields in `config/config.yaml`:
-- `listen_host`: DNS bind host
-- `listen_port`: DNS bind port
-- `policy_db_path`: SQLite file path (relative paths resolve under config directory)
-- `web_gui.host`: Web UI host
-- `web_gui.port`: Web UI port
-- `upstream_dns_servers`: list of upstream resolvers (min 2)
-- `ip_groups`: optional migration seed only
-- `rules`: optional migration seed only
+Policy/DB:
+- `policy_db_path`: SQLite DB path (default `policy.db`)
+- `ip_groups`: optional migration seed
+- `rules`: optional migration seed
 
 Rule fields:
 - `group`
 - `domain`
-- `action` (`allow|rewrite|block`)
-- `target` (required when `action` is `rewrite`)
+- `action`: `allow|rewrite|block`
+- `target`: required for `rewrite`
 
-## Policy DB migration behavior
+Web UI identity/settings:
+- `local_lan_name`: shown in header
+- `support_user_name`: shown in header
+- `support_user_email`: shown in header/mail link
+- `web_gui.host`
+- `web_gui.port`
 
-- Policies are loaded from SQLite at runtime.
-- On first bootstrap (DB missing/empty), `ip_groups` and `rules` from YAML are migrated into SQLite.
-- After migration, those two YAML sections are cleared.
-- Ongoing policy management should be done in the Web UI Policy DB tab.
+Logging:
+- `verbose_logging`: enable action logs for `block` and `rewrite`
+- `log_file_path`: target log file path
+- `logrotate.max_bytes`: rotation threshold in bytes
+- `logrotate.backup_count`: number of backup files to keep
+
+Example:
+
+```yaml
+listen_host: 0.0.0.0
+listen_port: 53
+response_ttl: 60
+policy_db_path: policy.db
+local_lan_name: TESTER
+support_user_email: support@localhost
+support_user_name: Support
+web_gui:
+  host: 0.0.0.0
+  port: 8080
+upstream_dns_servers:
+  - host: 1.1.1.1
+    port: 53
+  - host: 8.8.8.8
+    port: 53
+verbose_logging: true
+log_file_path: iporter.log
+logrotate:
+  max_bytes: 10485760
+  backup_count: 5
+```
+
+## `secure.json`
+
+Default format:
+
+```json
+{
+  "password": "P4ssw0rd!",
+  "session_secret": "change-this-session-secret"
+}
+```
+
+## Policy Migration Behavior
+
+- On first startup with empty/missing DB:
+  - migrate `ip_groups` and `rules` from YAML into DB
+  - clear those sections in YAML
+- Afterwards, policy is managed from DB/UI.
+
+## Testing
+
+```bash
+.venv/bin/pytest -q
+```
 
 ## Notes
 
-- Rules are evaluated in order; first match wins.
-- Current DNS transport is UDP only.
+- DNS transport is UDP.
+- Rules are evaluated in order (first match wins).
