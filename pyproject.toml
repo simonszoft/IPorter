@@ -8,7 +8,8 @@ version = "0.1"
 description = "Local DNS server with source-IP group based rewrite rules"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "IPorter" }]
+license = { text = "MIT" }
+authors = [{ name = "Simon Nandor", email = "simonszoft@gmail.com" }]
 dependencies = [
   "dnslib>=0.9.24",
   "Flask>=3.0.0",

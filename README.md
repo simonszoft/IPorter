@@ -1,5 +1,9 @@
 # IPorter - Local DNS Server
 
+![IPorter Logo](assets/iporter_logo.png)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 IPorter is a local DNS server with source-IP based policy control, SQLite-backed policy storage, and a protected Web UI.
 
 ## Features
