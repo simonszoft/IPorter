@@ -89,8 +89,10 @@ class DnsUdpProtocol(asyncio.DatagramProtocol):
 
             if decision.action == "rewrite" and decision.target:
                 forward_packet = self._build_rewrite_query(request, question, decision)
-                upstream_reply = await self._query_upstream_parallel(forward_packet)
-                self._send_response(upstream_reply, addr)
+                upstream_reply_bytes = await self._query_upstream_parallel(forward_packet)
+                upstream_reply = DNSRecord.parse(upstream_reply_bytes)
+                upstream_reply.questions = [request.q]
+                self._send_response(upstream_reply.pack(), addr)
                 self._log_policy_action(client_ip, query_name, decision)
                 LOG.info(
                     "Rewrote %s -> %s for %s",

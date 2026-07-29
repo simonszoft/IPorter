@@ -10,7 +10,6 @@ IPorter is a local DNS server with source-IP based policy control, SQLite-backed
   - `block` (NXDOMAIN)
 - Parallel upstream DNS queries (first successful reply wins)
 - Policy persistence in SQLite
-- One-time policy migration from YAML to SQLite
 - Web UI with authentication
 - Web UI pages:
   - Status
