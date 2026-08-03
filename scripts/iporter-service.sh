@@ -18,6 +18,33 @@ EXEC_BIN="${PROJECT_DIR}/.venv/bin/iporter"
 WEB_UI_EXEC_BIN="${PROJECT_DIR}/.venv/bin/iporter-config-ui"
 DEFAULT_DNS_PORT="53"
 ALT_DNS_PORT="5353"
+SUPPORTED_DISTRO=""
+
+detect_supported_distro() {
+  local distro_like=""
+
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    distro_like="${ID_LIKE:-}"
+
+    case "${ID:-}" in
+      ubuntu|debian)
+        SUPPORTED_DISTRO="${ID}"
+        ;;
+      *)
+        if [[ " ${distro_like} " == *" debian "* ]]; then
+          SUPPORTED_DISTRO="debian"
+        fi
+        ;;
+    esac
+  fi
+
+  if [[ -z "${SUPPORTED_DISTRO}" ]]; then
+    echo "Unsupported distribution. This script currently supports Debian and Ubuntu only." >&2
+    exit 1
+  fi
+}
 
 usage() {
   cat <<'EOF'
@@ -42,6 +69,41 @@ require_cmd() {
     echo "Missing required command: $1" >&2
     exit 1
   fi
+}
+
+install_apt_prerequisites() {
+  local packages=("$@")
+  run_privileged apt-get update
+  run_privileged apt-get install -y "${packages[@]}"
+}
+
+prepare_ubuntu_install() {
+  local packages=(systemd systemd-resolved python3 python3-venv python3-pip)
+  echo "Detected Ubuntu. Running Ubuntu-specific install steps..."
+  install_apt_prerequisites "${packages[@]}"
+}
+
+prepare_debian_install() {
+  local packages=(systemd systemd-resolved python3 python3-venv python3-pip)
+  echo "Detected Debian. Running Debian-specific install steps..."
+  install_apt_prerequisites "${packages[@]}"
+}
+
+prepare_install_for_distro() {
+  case "${SUPPORTED_DISTRO}" in
+    ubuntu)
+      require_cmd apt-get
+      prepare_ubuntu_install
+      ;;
+    debian)
+      require_cmd apt-get
+      prepare_debian_install
+      ;;
+    *)
+      echo "Unsupported distribution: ${SUPPORTED_DISTRO}" >&2
+      exit 1
+      ;;
+  esac
 }
 
 run_privileged() {
@@ -157,6 +219,7 @@ EOF
 }
 
 install_service() {
+  prepare_install_for_distro
   require_cmd systemctl
 
   if [[ ! -x "${EXEC_BIN}" ]]; then
@@ -238,6 +301,8 @@ status_service() {
 }
 
 main() {
+  detect_supported_distro
+
   if [[ $# -ne 1 ]]; then
     usage
     exit 1

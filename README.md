@@ -1,6 +1,8 @@
 # IPorter - Local DNS Server
 
-![IPorter Logo](assets/iporter.png)
+![IPorter Logo](assets/iporter_logo.png)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 IPorter is a local DNS server with source-IP based policy control, SQLite-backed policy storage, and a protected Web UI.
 
@@ -287,7 +289,3 @@ Used by the Status page to show daemon process state and run time. The file is r
 - DNS transport is UDP.
 - Rules are evaluated in order (first match wins).
 - Policy updates from Web UI are auto-applied by running daemon (policy DB change detection and in-memory reload).
-
-## LICENCE
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
